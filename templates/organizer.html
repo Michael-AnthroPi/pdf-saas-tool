@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="fr" data-bs-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <title>Organiser PDF</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <style>
+        /* Style spécifique pour la grille de pages */
+        #sortable-list {
+            list-style-type: none;
+            padding: 0;
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); /* Grille responsive */
+            gap: 20px;
+        }
+        .page-card {
+            background: #2c2c2c;
+            border: 1px solid #444;
+            border-radius: 8px;
+            cursor: move; /* Curseur main pour déplacer */
+            position: relative;
+            transition: transform 0.2s;
+        }
+        .page-card:hover { transform: scale(1.02); border-color: #fff; }
+        .page-thumb { width: 100%; border-bottom: 1px solid #444; border-radius: 8px 8px 0 0; }
+        .page-number { font-weight: bold; padding: 5px; color: #aaa; }
+        .delete-btn {
+            position: absolute; top: 5px; right: 5px;
+            background: rgba(220, 53, 69, 0.8); color: white;
+            border: none; border-radius: 50%; width: 25px; height: 25px;
+            display: flex; align-items: center; justify-content: center;
+            cursor: pointer;
+        }
+        .delete-btn:hover { background: red; }
+    </style>
+</head>
+<body class="bg-dark text-light">
+    
+    <nav class="navbar navbar-dark bg-darker mb-4">
+        <div class="container">
+            <a class="btn btn-outline-secondary btn-sm" href="/"><i class="bi bi-arrow-left"></i> Retour</a>
+            <span class="navbar-brand">Organisateur Visuel</span>
+            <button id="save-btn" class="btn btn-success fw-bold">💾 Sauvegarder</button>
+        </div>
+    </nav>
+
+    <div class="container">
+        <div id="upload-zone" class="card bg-darker border-secondary p-5 text-center shadow">
+            <i class="bi bi-grid-3x3 display-1 text-danger mb-3"></i>
+            <h3>Organiser votre PDF</h3>
+            <p class="text-muted">Glissez-déposez pour trier, cliquez sur la croix pour supprimer.</p>
+            <input type="file" id="pdf-input" class="form-control mt-3" accept=".pdf">
+        </div>
+
+        <div id="work-zone" class="d-none">
+            <ul id="sortable-list">
+                </ul>
+        </div>
+        
+        <form id="hidden-form" method="POST" action="/tool/organize" enctype="multipart/form-data" class="d-none">
+            <input type="file" name="file_reupload" id="file_reupload"> 
+            <input type="text" name="page_order" id="page_order_input">
+        </form>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sortablejs@latest/Sortable.min.js"></script>
+
+    <script>
+        // Configuration PDF.js
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
+
+        const pdfInput = document.getElementById('pdf-input');
+        const uploadZone = document.getElementById('upload-zone');
+        const workZone = document.getElementById('work-zone');
+        const sortableList = document.getElementById('sortable-list');
+        let currentFile = null;
+
+        pdfInput.addEventListener('change', async function(e) {
+            if (e.target.files.length === 0) return;
+            currentFile = e.target.files[0];
+
+            // 1. Afficher la zone de travail
+            uploadZone.classList.add('d-none');
+            workZone.classList.remove('d-none');
+
+            // 2. Lire le PDF et générer les images
+            const arrayBuffer = await currentFile.arrayBuffer();
+            const pdf = await pdfjsLib.getDocument(arrayBuffer).promise;
+
+            for (let i = 1; i <= pdf.numPages; i++) {
+                const page = await pdf.getPage(i);
+                const viewport = page.getViewport({ scale: 0.5 }); // Miniature
+                
+                const canvas = document.createElement('canvas');
+                const context = canvas.getContext('2d');
+                canvas.height = viewport.height;
+                canvas.width = viewport.width;
+                canvas.className = 'page-thumb';
+
+                await page.render({ canvasContext: context, viewport: viewport }).promise;
+
+                // Créer l'élément de liste (Carte)
+                const li = document.createElement('li');
+                li.className = 'page-card text-center';
+                li.setAttribute('data-original-index', i - 1); // Python commence à 0
+
+                // Bouton supprimer
+                const delBtn = document.createElement('button');
+                delBtn.className = 'delete-btn';
+                delBtn.innerHTML = '×';
+                delBtn.onclick = function() { li.remove(); };
+
+                li.appendChild(delBtn);
+                li.appendChild(canvas);
+                li.appendChild(document.createElement('div')).className = 'page-number';
+                li.lastChild.innerText = `Page ${i}`;
+
+                sortableList.appendChild(li);
+            }
+
+            // 3. Activer le Drag & Drop
+            new Sortable(sortableList, {
+                animation: 150,
+                ghostClass: 'bg-primary'
+            });
+        });
+
+        // 4. Sauvegarder
+        document.getElementById('save-btn').addEventListener('click', function() {
+            if (!currentFile) return;
+
+            // Récupérer le nouvel ordre
+            const items = sortableList.querySelectorAll('li');
+            let order = [];
+            items.forEach(item => {
+                order.push(item.getAttribute('data-original-index'));
+            });
+
+            // Préparer l'envoi
+            // Astuce : On utilise DataTransfer pour remettre le fichier dans l'input caché
+            const dataTransfer = new DataTransfer();
+            dataTransfer.items.add(currentFile);
+            document.getElementById('file_reupload').files = dataTransfer.files;
+
+            document.getElementById('page_order_input').value = order.join(',');
+            
+            document.getElementById('hidden-form').submit();
+        });
+    </script>
+</body>
+</html>
