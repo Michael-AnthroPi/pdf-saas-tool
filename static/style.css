@@ -1,26 +1,6 @@
-:root {
-    --bg-dark: #121212;
-    --bg-card: #1e1e1e;
-}
-body { 
-    background-color: var(--bg-dark); 
-    font-family: 'Segoe UI', sans-serif; 
-}
-.bg-darker { 
-    background-color: var(--bg-card) !important; 
-}
-
-/* Style des cartes outils */
-.tool-card {
-    background-color: var(--bg-card);
-    transition: transform 0.2s ease-in-out, background-color 0.2s;
-    cursor: pointer;
-}
-.tool-card:hover {
-    transform: translateY(-5px);
-    background-color: #2c2c2c;
-    border: 1px solid #444;
-}
-
-/* Couleurs de texte pour le contraste */
+:root { --bg-dark: #121212; --bg-card: #1e1e1e; }
+body { background-color: var(--bg-dark); font-family: 'Segoe UI', sans-serif; }
+.bg-darker { background-color: var(--bg-card) !important; }
+.tool-card { background-color: var(--bg-card); transition: transform 0.2s ease-in-out, background-color 0.2s; cursor: pointer; }
+.tool-card:hover { transform: translateY(-5px); background-color: #2c2c2c; border: 1px solid #444; }
 .text-light { color: #e0e0e0 !important; }
