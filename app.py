@@ -1,53 +1,25 @@
-import os
-import shutil
-from flask import Flask, render_template, request, send_file, flash, redirect, url_for
-from werkzeug.utils import secure_filename
-from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
-# On importe les nouvelles fonctions depuis utils
-from utils import merge_pdfs, split_pdf, pdf_to_images, rotate_pdf, images_to_pdf, protect_pdf
+# ... (Gardez les imports du haut comme avant) ...
+from utils import (
+    merge_pdfs, split_pdf, pdf_to_images, rotate_pdf, 
+    images_to_pdf, protect_pdf, compress_pdf, pdf_to_word, word_to_pdf
+)
 
-app = Flask(__name__)
-app.secret_key = os.environ.get('SECRET_KEY', 'dev_key_secret_123')
+# ... (Gardez la config Flask et Login comme avant) ...
 
-# --- LOGIN SETUP ---
-login_manager = LoginManager()
-login_manager.init_app(app)
-login_manager.login_view = 'login'
-
-class User(UserMixin):
-    def __init__(self, id):
-        self.id = id
-
-@login_manager.user_loader
-def load_user(user_id):
-    return User(user_id)
-
-# --- CONFIGURATION ---
-UPLOAD_FOLDER = '/tmp/uploads'
-OUTPUT_FOLDER = '/tmp/outputs'
-
-for folder in [UPLOAD_FOLDER, OUTPUT_FOLDER]:
-    if os.path.exists(folder):
-        shutil.rmtree(folder)
-    os.makedirs(folder, exist_ok=True)
-
-app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
-app.config['OUTPUT_FOLDER'] = OUTPUT_FOLDER
-
-# --- LA GRANDE LISTE DES OUTILS (Comme sur ta capture) ---
+# --- LISTE MISE À JOUR ---
 TOOLS = {
     'popular': [
         {'id': 'merge', 'name': 'Fusionner PDF', 'icon': 'bi-arrows-angle-contract', 'color': 'text-danger', 'desc': 'Combiner des PDF dans l\'ordre de votre choix.'},
         {'id': 'split', 'name': 'Diviser PDF', 'icon': 'bi-scissors', 'color': 'text-danger', 'desc': 'Séparer une page ou extraire des pages.'},
-        {'id': 'compress', 'name': 'Compresser PDF', 'icon': 'bi-arrow-down-right-square', 'color': 'text-success', 'desc': 'Réduire la taille (Bientôt disponible).'}, 
+        {'id': 'compress', 'name': 'Compresser PDF', 'icon': 'bi-arrow-down-right-square', 'color': 'text-success', 'desc': 'Réduire la taille de votre fichier PDF.'}, 
     ],
     'convert_pdf': [
         {'id': 'pdf_to_img', 'name': 'PDF en JPG', 'icon': 'bi-file-image', 'color': 'text-warning', 'desc': 'Extraire toutes les images ou pages en JPG.'},
-        {'id': 'pdf_to_word', 'name': 'PDF en Word', 'icon': 'bi-file-word', 'color': 'text-primary', 'desc': 'Convertir en DOCX (Bientôt).'},
+        {'id': 'pdf_to_word', 'name': 'PDF en Word', 'icon': 'bi-file-word', 'color': 'text-primary', 'desc': 'Convertir facilement vos PDF en documents DOCX éditables.'},
     ],
     'convert_to_pdf': [
         {'id': 'img_to_pdf', 'name': 'JPG en PDF', 'icon': 'bi-images', 'color': 'text-warning', 'desc': 'Convertir vos images JPG/PNG en un document PDF.'},
-        {'id': 'word_to_pdf', 'name': 'Word en PDF', 'icon': 'bi-file-earmark-word', 'color': 'text-primary', 'desc': 'Convertir DOCX en PDF (Bientôt).'},
+        {'id': 'word_to_pdf', 'name': 'Word en PDF', 'icon': 'bi-file-earmark-word', 'color': 'text-primary', 'desc': 'Convertir DOCX en PDF.'},
     ],
     'security': [
         {'id': 'protect', 'name': 'Protéger PDF', 'icon': 'bi-shield-lock', 'color': 'text-dark', 'desc': 'Chiffrer votre PDF avec un mot de passe.'},
@@ -55,45 +27,11 @@ TOOLS = {
     ],
     'edit': [
         {'id': 'rotate', 'name': 'Pivoter PDF', 'icon': 'bi-arrow-clockwise', 'color': 'text-info', 'desc': 'Faites pivoter vos pages PDF.'},
-        {'id': 'organize', 'name': 'Organiser PDF', 'icon': 'bi-grid-3x3', 'color': 'text-danger', 'desc': 'Trier ou supprimer des pages.'},
+        {'id': 'organize', 'name': 'Organiser PDF', 'icon': 'bi-grid-3x3', 'color': 'text-danger', 'desc': 'Trier ou supprimer des pages (Bientôt).'},
     ]
 }
 
-# Fonction utilitaire pour trouver un outil dans la liste
-def get_tool_by_id(tool_id):
-    for category in TOOLS.values():
-        for tool in category:
-            if tool['id'] == tool_id:
-                return tool
-    return None
-
-# --- ROUTES ---
-
-@app.route('/login', methods=['GET', 'POST'])
-def login():
-    if request.method == 'POST':
-        username = request.form.get('username')
-        password = request.form.get('password')
-        env_user = os.environ.get('ADMIN_USER', 'admin')
-        env_pass = os.environ.get('ADMIN_PASSWORD', 'admin')
-
-        if username == env_user and password == env_pass:
-            login_user(User(id=username))
-            return redirect(url_for('dashboard'))
-        else:
-            flash('Identifiants incorrects.')
-    return render_template('login.html')
-
-@app.route('/logout')
-@login_required
-def logout():
-    logout_user()
-    return redirect(url_for('login'))
-
-@app.route('/')
-@login_required
-def dashboard():
-    return render_template('dashboard.html', tools=TOOLS)
+# ... (Gardez les fonctions get_tool_by_id, login, logout, dashboard comme avant) ...
 
 @app.route('/tool/<tool_id>', methods=['GET', 'POST'])
 @login_required
@@ -103,7 +41,6 @@ def tool_view(tool_id):
         return redirect(url_for('dashboard'))
 
     if request.method == 'POST':
-        # Vérification spéciale pour le mot de passe (protection)
         user_password = request.form.get('user_password', None)
         
         if 'files' not in request.files:
@@ -115,10 +52,9 @@ def tool_view(tool_id):
             flash('Sélectionnez un fichier.')
             return redirect(request.url)
 
-        # Nettoyage et Sauvegarde
         saved_paths = []
         try:
-            # Vider le dossier uploads
+            # Nettoyage
             for f in os.listdir(app.config['UPLOAD_FOLDER']):
                 os.remove(os.path.join(app.config['UPLOAD_FOLDER'], f))
 
@@ -128,35 +64,41 @@ def tool_view(tool_id):
                 file.save(path)
                 saved_paths.append(path)
 
-            # --- AIGUILLAGE LOGIQUE ---
             output_file = None
             
+            # --- ROUTAGE COMPLET ---
             if tool_id == 'merge':
                 if len(saved_paths) < 2:
-                    flash('Il faut au moins 2 fichiers pour fusionner.')
+                    flash('Il faut au moins 2 fichiers.')
                     return redirect(request.url)
                 output_file = merge_pdfs(saved_paths, app.config['OUTPUT_FOLDER'])
             
             elif tool_id == 'split':
                 output_file = split_pdf(saved_paths[0], app.config['OUTPUT_FOLDER'])
-            
             elif tool_id == 'pdf_to_img':
                 output_file = pdf_to_images(saved_paths[0], app.config['OUTPUT_FOLDER'])
-            
             elif tool_id == 'img_to_pdf':
                 output_file = images_to_pdf(saved_paths, app.config['OUTPUT_FOLDER'])
-                
             elif tool_id == 'rotate':
                 output_file = rotate_pdf(saved_paths[0], app.config['OUTPUT_FOLDER'])
-                
             elif tool_id == 'protect':
                 if not user_password:
-                    flash('Veuillez entrer un mot de passe pour protéger le fichier.')
+                    flash('Mot de passe requis.')
                     return redirect(request.url)
                 output_file = protect_pdf(saved_paths[0], user_password, app.config['OUTPUT_FOLDER'])
+                
+            # --- NOUVEAUX OUTILS ---
+            elif tool_id == 'compress':
+                output_file = compress_pdf(saved_paths[0], app.config['OUTPUT_FOLDER'])
+                
+            elif tool_id == 'pdf_to_word':
+                output_file = pdf_to_word(saved_paths[0], app.config['OUTPUT_FOLDER'])
+                
+            elif tool_id == 'word_to_pdf':
+                output_file = word_to_pdf(saved_paths[0], app.config['OUTPUT_FOLDER'])
 
             else:
-                flash("Cet outil est en cours de développement.")
+                flash("Outil non implémenté.")
                 return redirect(request.url)
 
             if output_file:
@@ -166,7 +108,9 @@ def tool_view(tool_id):
             flash(f"Erreur : {str(e)}")
             return redirect(request.url)
 
-    return render_template('tool.html', tool=tool)
-
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    # Mise à jour de l'acceptation de fichier pour Word
+    accept_types = ".pdf"
+    if tool_id == 'img_to_pdf': accept_types = ".jpg, .jpeg, .png"
+    if tool_id == 'word_to_pdf': accept_types = ".docx, .doc"
+    
+    return render_template('tool.html', tool=tool, accept_types=accept_types)

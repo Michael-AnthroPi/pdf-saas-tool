@@ -36,8 +36,7 @@
                 
                 <div class="mb-4">
                     <input type="file" name="files" class="form-control form-control-lg bg-dark text-light border-secondary" 
-                           {% if tool.id == 'img_to_pdf' %}accept=".jpg, .jpeg, .png"{% else %}accept=".pdf"{% endif %} 
-                           multiple required>
+       accept="{{ accept_types }}" multiple required>
                 </div>
 
                 {% if tool.id == 'protect' %}
